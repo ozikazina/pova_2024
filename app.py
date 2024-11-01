@@ -3,10 +3,13 @@ import gradio as gr
 from torchvision import transforms
 from PIL import Image
 from torchvision.models import efficientnet_b4, resnet101, alexnet
+from model import HashNet, Hash_func, AlexNet, transform_image
 from pathlib import Path
 
-model = alexnet()
-model.fc = torch.nn.Identity()
+# model = alexnet()
+# model.fc = torch.nn.Identity()
+model  = HashNet()
+model.net.load_state_dict(torch.load("hashnet_pretrained.pth", weights_only=True))
 model.eval()
 
 image_embeddings = []
@@ -34,6 +37,10 @@ for file in Path("images").iterdir():
     image_embeddings.append((file, embedding))
     # image_paths.append(file)
 
+def on_select(backend_type, hash_type):
+    print(backend_type, hash_type)
+    return "ABC"
+
 def on_image_upload(image):
     img_tensor = img_transforms(image.convert("RGB")).unsqueeze(0)
     embedding:torch.Tensor = model(img_tensor)
@@ -47,7 +54,12 @@ with gr.Blocks() as demo:
     with gr.Row():
         image_input = gr.Image(type="pil", label="Upload image")
         image_gallery = gr.Gallery(label="Similar images", elem_id="gallery")
+    with gr.Row():
+        backend_type = gr.Dropdown(["ResNet", "AlexNet", "ViT"])
+        hash_type = gr.Dropdown(["Hash", "Composition"])
+        display = gr.Text()
 
     image_input.upload(on_image_upload, inputs=image_input, outputs=image_gallery)
+    backend_type.select(on_select, [backend_type, hash_type], display)
 
 demo.launch()
