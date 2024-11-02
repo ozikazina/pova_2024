@@ -1,65 +1,77 @@
 import torch
 import gradio as gr
-from torchvision import transforms
-from PIL import Image
-from torchvision.models import efficientnet_b4, resnet101, alexnet
-from model import HashNet, Hash_func, AlexNet, transform_image
+from model import HashNet, ResNet, DeiT, ViT, AlexNet, transform_image
 from pathlib import Path
+import faiss
 
+# from torchvision.models import efficientnet_b4, resnet101, alexnet
 # model = alexnet()
 # model.fc = torch.nn.Identity()
-model  = HashNet()
-model.net.load_state_dict(torch.load("hashnet_pretrained.pth", weights_only=True))
-model.eval()
-
-image_embeddings = []
-image_paths = []
 
 ALLOWED_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
-img_transforms = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(
-        mean=[0.485,0.456,0.406],
-        std=[0.229,0.224,0.225]
-    )
-])
+image_embeddings:faiss.Index = None
+image_names = []
 
+def load_indices(name):
+    global image_embeddings, image_names
+    image_embeddings = faiss.read_index(f"indices/{name}.index")
+    image_names = Path(f"indices/{name}.ids").read_text().split("\n")
 
-for file in Path("images").iterdir():
-    if file.suffix not in ALLOWED_SUFFIXES:
-        continue
-    
-    img = Image.open(file).convert("RGB")
-    embedding = model(img_transforms(img).unsqueeze(0))
-    embedding /= torch.linalg.norm(embedding[0])
-    image_embeddings.append((file, embedding))
-    # image_paths.append(file)
+model  = HashNet(AlexNet())
+model.net.load_state_dict(torch.load("models/model_alexnet.pth", weights_only=True))
+load_indices("vit")
+nprobe = 1
 
-def on_select(backend_type, hash_type):
-    print(backend_type, hash_type)
-    return "ABC"
+def on_select(backend_type):
+    global model
+    if backend_type == "ResNet":
+        model = HashNet(ResNet())
+        model.net.load_state_dict(torch.load("models/model_resnet.pth", weights_only=True))
+        load_indices("resnet")
+    elif backend_type == "AlexNet":
+        model = HashNet(AlexNet())
+        model.net.load_state_dict(torch.load("models/model_alexnet.pth", weights_only=True))
+        load_indices("alexnet")
+    elif backend_type == "ViT":
+        model = HashNet(ViT())
+        model.net.load_state_dict(torch.load("models/model_vit.pth", weights_only=True))
+        load_indices("vit")
+    elif backend_type == "DeiT":
+        model = HashNet(DeiT())
+        model.net.load_state_dict(torch.load("models/model_deit.pth", weights_only=True))
+        load_indices("deit")
+
+    model.nprobe = nprobe
+    return f"{backend_type} loaded."
+
+def on_set_probe(nprobe_val):
+    global nprobe
+    nprobe = nprobe_val
+    model.nprobe = nprobe_val
 
 def on_image_upload(image):
-    img_tensor = img_transforms(image.convert("RGB")).unsqueeze(0)
-    embedding:torch.Tensor = model(img_tensor)
-    # embedding /= torch.linalg.norm(embedding[0])
+    img_tensor = transform_image(image)
+    with torch.no_grad():
+        embedding:torch.Tensor = model(img_tensor)
 
+    # embedding /= torch.linalg.norm(embedding[0])
     # sims = sorted(image_embeddings, key=lambda x: torch.dot(x[1][0], embedding[0]), reverse=True)
-    sims = sorted(image_embeddings, key=lambda x: torch.linalg.norm(x[1][0] - embedding[0]), reverse=False)
-    return [x[0] for x in sims][:5]
+    # sims = sorted(image_embeddings, key=lambda x: torch.linalg.norm(x[1][0] - embedding[0]), reverse=False)
+    _, sims = image_embeddings.search(embedding, 10)
+    return [f"images/{image_names[x]}" for x in sims[0]]
 
 with gr.Blocks() as demo:
     with gr.Row():
         image_input = gr.Image(type="pil", label="Upload image")
         image_gallery = gr.Gallery(label="Similar images", elem_id="gallery")
     with gr.Row():
-        backend_type = gr.Dropdown(["ResNet", "AlexNet", "ViT"])
-        hash_type = gr.Dropdown(["Hash", "Composition"])
+        backend_type = gr.Dropdown(["AlexNet", "ResNet", "ViT", "DeiT"])
+        nprobe_slider = gr.Slider(minimum=1, maximum=20, value=1, step=1)
         display = gr.Text()
 
     image_input.upload(on_image_upload, inputs=image_input, outputs=image_gallery)
-    backend_type.select(on_select, [backend_type, hash_type], display)
+    backend_type.select(on_select, backend_type, display)
+    nprobe_slider.change(on_set_probe, nprobe_slider, None)
 
 demo.launch()
