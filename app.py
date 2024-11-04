@@ -55,9 +55,6 @@ def on_image_upload(image):
     with torch.no_grad():
         embedding:torch.Tensor = model(img_tensor)
 
-    # embedding /= torch.linalg.norm(embedding[0])
-    # sims = sorted(image_embeddings, key=lambda x: torch.dot(x[1][0], embedding[0]), reverse=True)
-    # sims = sorted(image_embeddings, key=lambda x: torch.linalg.norm(x[1][0] - embedding[0]), reverse=False)
     _, sims = image_embeddings.search(embedding, 10)
     return [f"images/{image_names[x]}" for x in sims[0]]
 
@@ -66,9 +63,9 @@ with gr.Blocks() as demo:
         image_input = gr.Image(type="pil", label="Upload image")
         image_gallery = gr.Gallery(label="Similar images", elem_id="gallery")
     with gr.Row():
-        backend_type = gr.Dropdown(["AlexNet", "ResNet", "ViT", "DeiT"])
-        nprobe_slider = gr.Slider(minimum=1, maximum=20, value=1, step=1)
-        display = gr.Text()
+        backend_type = gr.Dropdown(["AlexNet", "ResNet", "ViT", "DeiT"], label="Model")
+        nprobe_slider = gr.Slider(minimum=1, maximum=20, value=1, step=1, label="Probes")
+        display = gr.Text(label="Info")
 
     image_input.upload(on_image_upload, inputs=image_input, outputs=image_gallery)
     backend_type.select(on_select, backend_type, display)

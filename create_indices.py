@@ -62,10 +62,10 @@ if args.model is None or args.model.lower() == "vit":
     index, names = create_index(model, args.dataset)
     write_indices(index, names, "vit", args.output)
 
-# if args.model is None or args.model.lower() == "deit":
-#     model = load_model(HashNet(ViT()), "models/model_deit.pth")
-#     index, names = create_index(model, args.dataset)
-#     write_indices(index, names, "deit", args.output)
+if args.model is None or args.model.lower() == "deit":
+    model = load_model(HashNet(DeiT()), "models/model_deit.pth")
+    index, names = create_index(model, args.dataset)
+    write_indices(index, names, "deit", args.output)
 
 if args.model is None or args.model.lower() == "resnet":
     model = load_model(HashNet(ResNet()), "models/model_resnet.pth")
