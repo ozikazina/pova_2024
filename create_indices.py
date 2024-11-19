@@ -1,22 +1,26 @@
-import faiss
-from model import HashNet, ResNet, DeiT, ViT, AlexNet, transform_image
-from pathlib import Path
-from PIL import Image
-import torch
 from argparse import ArgumentParser
+from pathlib import Path
 
 argp = ArgumentParser()
-argp.add_argument("-m", "--model", help="Only embed using this model: AlexNet, ResNet, ViT, DeiT")
+argp.add_argument("-m", "--model", help="Only embed using this model: AlexNet, ResNet, ViT, DeiT, CLIP")
 argp.add_argument("-d", "--dataset", type=Path, default=Path("images"), help="Image dataset path.")
 argp.add_argument("-o", "--output", type=Path, default=Path("indices"), help="Index output path.")
-
 args = argp.parse_args()
+
+import faiss
+from model import HashNet, ResNet, DeiT, ViT, AlexNet, transform_image
+from transformers import CLIPProcessor, CLIPModel
+from PIL import Image
+import torch
+from typing import Callable, Any
+
+
 
 ALLOWED_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def create_index(model, dataset_dir:Path):
+def create_index(model, dataset_dir:Path, processor:Callable[[Image.Image], Any]=None, d=64):
     print("Embedding dataset.")
     
     image_embeddings = []
@@ -28,13 +32,15 @@ def create_index(model, dataset_dir:Path):
                 continue
             
             img = Image.open(file).convert("RGB")
-            embedding = model(transform_image(img).to(device))
+            if processor is not None:
+                embedding = model.get_image_features(**processor(img))
+            else:
+                embedding = model(transform_image(img).to(device))
             image_embeddings.append(embedding.squeeze(0))
             image_names.append(file.name)
 
     image_embeddings = torch.stack(image_embeddings).cpu()
 
-    d = 64
     quantizer = faiss.IndexFlatL2(d)
     if image_embeddings.shape[0] < 1000:
         ncenters = 2
@@ -76,5 +82,12 @@ if args.model is None or args.model.lower() == "alexnet":
     model = load_model(HashNet(AlexNet()), "models/model_alexnet.pth")
     index, names = create_index(model, args.dataset)
     write_indices(index, names, "alexnet", args.output)
+
+if args.model is None or args.model.lower() == "clip":
+    model_name = "openai/clip-vit-base-patch32"  # You can choose other variants like vit-large
+    model = CLIPModel.from_pretrained(model_name)
+    processor = CLIPProcessor.from_pretrained(model_name)
+    index, names = create_index(model, args.dataset, lambda img:processor(images=[img], return_tensors="pt"), d=512)
+    write_indices(index, names, "clip", args.output)
 
 print("Done.")
