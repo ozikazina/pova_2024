@@ -1,10 +1,13 @@
 from argparse import ArgumentParser
 from pathlib import Path
+from coco_handler import prepare_coco
 
 argp = ArgumentParser()
 argp.add_argument("-m", "--model", help="Only embed using this model: AlexNet, ResNet, ViT, DeiT, CLIP")
 argp.add_argument("-d", "--dataset", type=Path, default=Path("images"), help="Image dataset path.")
 argp.add_argument("-o", "--output", type=Path, default=Path("indices"), help="Index output path.")
+argp.add_argument("--use-coco", action="store_true", help="Download and use COCO dataset")
+argp.add_argument("--coco-size", type=int, default=5000, help="Number of COCO images to use")
 args = argp.parse_args()
 
 import faiss
@@ -14,7 +17,8 @@ from PIL import Image
 import torch
 from typing import Callable, Any
 
-
+if args.use_coco:
+    prepare_coco(args.dataset, args.coco_size)
 
 ALLOWED_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
