@@ -8,6 +8,7 @@ argp.add_argument("-d", "--dataset", type=Path, default=Path("images"), help="Im
 argp.add_argument("-o", "--output", type=Path, default=Path("indices"), help="Index output path.")
 argp.add_argument("--use-coco", action="store_true", help="Download and use COCO dataset")
 argp.add_argument("--coco-size", type=int, default=5000, help="Number of COCO images to use")
+argp.add_argument("--dataset-type", type=str, choices=["test", "val"], default="val", help="COCO dataset type to use (test=40K images, val=5K images)")
 args = argp.parse_args()
 
 import faiss
@@ -18,7 +19,7 @@ import torch
 from typing import Callable, Any
 
 if args.use_coco:
-    prepare_coco(args.dataset, args.coco_size)
+    prepare_coco(args.dataset, args.coco_size, args.dataset_type)
 
 ALLOWED_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 

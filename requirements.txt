@@ -4,3 +4,4 @@ timm
 transformers
 pillow
 faiss
+matplotlib
