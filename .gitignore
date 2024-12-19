@@ -165,3 +165,4 @@ images/
 models/
 indices/clip.ids
 indices/clip.index
+benchmark_results/
