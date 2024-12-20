@@ -36,6 +36,7 @@ from transformers import CLIPProcessor, CLIPModel
 from PIL import Image
 import torch
 from typing import Callable, Any
+import timm
 
 if args.use_coco:
     prepare_coco(args.dataset, args.coco_size, args.dataset_type)
@@ -49,6 +50,7 @@ def create_index(
     model,
     dataset_dir: Path,
     processor: Callable[[Image.Image], Any] = None,
+    transform=None,
     d=64,
     num_images=5000,
 ):
@@ -62,6 +64,8 @@ def create_index(
             img = Image.open(file).convert("RGB")
             if processor is not None:
                 embedding = model.get_image_features(**processor(img))
+            elif transform is not None:
+                embedding = model(transform(img).to(device).unsqueeze(0))
             else:
                 embedding = model(transform_image(img).to(device))
             image_embeddings.append(embedding.squeeze(0))
@@ -123,9 +127,18 @@ if model_name == "" or model_name.startswith("clip"):
         model,
         args.dataset,
         lambda img: processor(images=[img], return_tensors="pt"),
-        d=512,
         num_images=args.coco_size,
     )
     write_indices(index, names, output_name, args.output)
+
+if model_name == "" or model_name == "dinov2":
+    model = timm.create_model("vit_small_patch14_dinov2.lvd142m", pretrained=True)
+    _ = model.eval()
+    data_config = timm.data.resolve_model_data_config(model)
+    transforms = timm.data.create_transform(**data_config, is_training=False)
+    index, names = create_index(
+        model, args.dataset, transform=transforms, num_images=args.coco_size
+    )
+    write_indices(index, names, model_name, args.output)
 
 print("Done.")

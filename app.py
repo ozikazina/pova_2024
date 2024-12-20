@@ -3,6 +3,7 @@ import gradio as gr
 import numpy as np
 from model import HashNet, ResNet, DeiT, ViT, AlexNet, transform_image
 from pathlib import Path
+import timm
 import faiss
 from datetime import datetime
 
@@ -52,6 +53,12 @@ def on_select(backend_type, image_input, cosine_distance):
         model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14")
         processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
         load_indices("clip_l")
+    elif backend_type == "DINOv2":
+        model = timm.create_model("vit_small_patch14_dinov2.lvd142m", pretrained=True)
+        _ = model.eval()
+        data_config = timm.data.resolve_model_data_config(model)
+        processor = timm.data.create_transform(**data_config, is_training=False)
+        load_indices("dinov2")
     elif backend_type == "ResNet":
         model = HashNet(ResNet())
         model.net.load_state_dict(
@@ -102,6 +109,9 @@ def on_image_upload(image, backend_type, cosine_distance):
         with torch.no_grad():
             inputs = processor(images=[image], return_tensors="pt")
             embedding: torch.Tensor = model.get_image_features(**inputs)
+    elif backend_type == "DINOv2":
+        with torch.no_grad():
+            embedding = model(processor(image).to(device).unsqueeze(0))
     else:
         img_tensor = transform_image(image)
         with torch.no_grad():
@@ -129,7 +139,7 @@ with gr.Blocks() as demo:
         image_gallery = gr.Gallery(label="Similar images", elem_id="gallery")
     with gr.Row():
         backend_type = gr.Dropdown(
-            ["CLIP", "CLIP-L", "AlexNet", "ResNet", "ViT", "DeiT"], label="Model"
+            ["CLIP", "CLIP-L", "DINOv2", "AlexNet", "ResNet", "ViT", "DeiT"], label="Model"
         )
         distance_type = gr.Checkbox(
             label="Cosine distance"
