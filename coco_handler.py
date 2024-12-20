@@ -26,7 +26,8 @@ class COCOHandler:
                 pbar.update(size)
 
     def setup_dataset(self, dataset_type: str = "val", num_images: int = 5000):
-        if self.target_dir.exists():
+        if self.target_dir.exists() and any(self.target_dir.iterdir()):
+            print("Skipping COCO download.")
             return len(list(self.target_dir.glob("*.jpg")))
 
         temp_dir = Path("temp_coco")

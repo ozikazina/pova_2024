@@ -34,13 +34,14 @@ def load_indices(name):
     index.add(embeddings)
     cosine_embeddings = index
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+model.to(device)
 processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 load_indices("clip")
 nprobe = 5
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def on_select(backend_type, image_input, cosine_distance):
@@ -88,7 +89,8 @@ def on_select(backend_type, image_input, cosine_distance):
         )
         load_indices("deit")
 
-    model.nprobe = nprobe
+    # model.nprobe = nprobe
+    model.to(device)
 
     if image_input:
         images = on_image_upload(image_input, backend_type, cosine_distance)
@@ -102,23 +104,29 @@ def on_set_probe(nprobe_val):
     nprobe = nprobe_val
     # model.nprobe = nprobe_val
 
+def on_cosine(backend_type, image_input, cosine_distance):
+    if image_input:
+        return on_image_upload(image_input, backend_type, cosine_distance)
+    else:
+        return []
 
 def on_image_upload(image, backend_type, cosine_distance):
     start_time = datetime.now()
     if backend_type.startswith("CLIP"):
         with torch.no_grad():
             inputs = processor(images=[image], return_tensors="pt")
+            inputs['pixel_values'] = inputs['pixel_values'].to(device)
             embedding: torch.Tensor = model.get_image_features(**inputs)
     elif backend_type == "DINOv2":
         with torch.no_grad():
             embedding = model(processor(image).to(device).unsqueeze(0))
     else:
-        img_tensor = transform_image(image)
+        img_tensor = transform_image(image).to(device)
         with torch.no_grad():
             embedding: torch.Tensor = model(img_tensor)
     embed_time = datetime.now()
 
-    embedding = embedding.numpy()
+    embedding = embedding.cpu().numpy()
     if cosine_distance:
         faiss.normalize_L2(embedding)
         _, sims = cosine_embeddings.search(embedding, 10)
@@ -142,7 +150,7 @@ with gr.Blocks() as demo:
             ["CLIP", "CLIP-L", "DINOv2", "AlexNet", "ResNet", "ViT", "DeiT"], label="Model"
         )
         distance_type = gr.Checkbox(
-            label="Cosine distance"
+            label="Cosine distance",
         )
         # nprobe_slider = gr.Slider(
         #     minimum=1, maximum=20, value=5, step=1, label="Probes"
@@ -152,6 +160,7 @@ with gr.Blocks() as demo:
     image_input.upload(
         on_image_upload, inputs=[image_input, backend_type, distance_type], outputs=image_gallery
     )
+    distance_type.select(on_cosine, [backend_type, image_input, distance_type], image_gallery)
     backend_type.select(on_select, [backend_type, image_input, distance_type], [display, image_gallery])
     # nprobe_slider.change(on_set_probe, nprobe_slider, None)
 

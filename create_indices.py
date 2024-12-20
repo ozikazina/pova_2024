@@ -59,11 +59,15 @@ def create_index(
     image_embeddings = []
     image_names = []
 
+    model.to(device)
+
     with torch.no_grad(), tqdm.tqdm(desc="Embedding", total=num_images) as pbar:
         for _, file in zip(range(num_images), dataset_dir.glob("*.jpg")):
             img = Image.open(file).convert("RGB")
             if processor is not None:
-                embedding = model.get_image_features(**processor(img))
+                processed = processor(img)
+                processed['pixel_values'] = processed['pixel_values'].to(device)
+                embedding = model.get_image_features(**processed)
             elif transform is not None:
                 embedding = model(transform(img).to(device).unsqueeze(0))
             else:
