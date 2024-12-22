@@ -4,13 +4,11 @@ import faiss
 from datetime import datetime
 import matplotlib.pyplot as plt
 from pathlib import Path
-import annoy
-import hnswlib
 import sys
 
 argp = ArgumentParser()
-argp.add_argument("--db_size", default=1000000, help="Maximum database size.")
-argp.add_argument("--search_size", default=20000, help="Number of lookups.")
+argp.add_argument("--db_size", default=1000000, type=int, help="Maximum database size.")
+argp.add_argument("--search_size", default=20000, type=int, help="Number of lookups.")
 argp.add_argument(
     "--output", type=Path, default=Path("benchmark_results"), help="Output folder."
 )
@@ -43,7 +41,7 @@ search_size = args.search_size
 fig, ax = plt.subplots()
 
 
-def benchmark_method(name, color, init, search):
+def benchmark_method(name, color, embeddings, init, search):
     print(name)
     timings = []
     sizes = []
@@ -77,59 +75,53 @@ def benchmark_method(name, color, init, search):
     ax.loglog(sizes, timings, color, label=name)
 
 
-def setup_faiss_quantized(db):
-    quantizer = faiss.IndexFlatIP(db.shape[1])
-    ncenters = int(db.shape[0] ** 0.5)
-    index = faiss.IndexIVFFlat(quantizer, db.shape[1], ncenters)
-    index.train(db)
-    index.add(db)
-    index.nprobe = 1
-    return index
-
-
 def setup_faiss(db):
     index = faiss.IndexFlatIP(db.shape[1])
     index.train(db)
     index.add(db)
     return index
 
-
-def run_annoy(setup, db, x):
-    for vec in x:
-        _ = setup.get_nns_by_vector(vec, 1, include_distances=False)
-
-
-def setup_annoy(db):
-    index = annoy.AnnoyIndex(db.shape[1], "dot")
-    for i, vec in enumerate(db):
-        index.add_item(i, vec)
-
-    index.build(10)
+def setup_faiss_quantized(db, nprobes, exponent):
+    quantizer = faiss.IndexFlatIP(db.shape[1])
+    ncenters = int(db.shape[0] ** exponent)
+    index = faiss.IndexIVFFlat(quantizer, db.shape[1], ncenters)
+    index.train(db)
+    index.add(db)
+    index.nprobe = nprobes
     return index
 
-def setup_hnsw(db):
-    index = hnswlib.Index(space="ip", dim=db.shape[1])
-    index.init_index(max_elements=db.shape[0], ef_construction=30, M=48)
-    index.add_items(db)
-    return index
+benchmark_method("Normal", "blue", embeddings, setup_faiss, lambda setup, db, x: setup.search(x, 1))
 
 benchmark_method(
-    "NumPy", "green", lambda db: None, lambda setup, db, x: np.argmax(db @ x.T, axis=0)
+    "Clustered M 1", "cornflowerblue", embeddings, lambda db: setup_faiss_quantized(db, 1, 0.5), lambda setup, db, x: setup.search(x, 1)
 )
-
-benchmark_method("FAISS", "cornflowerblue", setup_faiss, lambda setup, db, x: setup.search(x, 1))
 
 benchmark_method(
-    "FAISS Clustered", "royalblue", setup_faiss_quantized, lambda setup, db, x: setup.search(x, 1)
+    "Clustered M 10", "royalblue", embeddings, lambda db: setup_faiss_quantized(db, 10, 0.5), lambda setup, db, x: setup.search(x, 1)
 )
 
-benchmark_method("Annoy", "red", setup_annoy, run_annoy)
+benchmark_method(
+    "Clustered S 1", "orangered", embeddings, lambda db: setup_faiss_quantized(db, 1, 0.25), lambda setup, db, x: setup.search(x, 1)
+)
 
-benchmark_method("HNSW", "orangered", setup_hnsw, lambda setup, db, x: setup.knn_query(x, k=1))
+benchmark_method(
+    "Clustered S 10", "red", embeddings, lambda db: setup_faiss_quantized(db, 10, 0.25), lambda setup, db, x: setup.search(x, 1)
+)
+
+benchmark_method(
+    "Clustered L 1", "lime", embeddings, lambda db: setup_faiss_quantized(db, 1, 0.75), lambda setup, db, x: setup.search(x, 1)
+)
+
+benchmark_method(
+    "Clustered L 10", "green", embeddings, lambda db: setup_faiss_quantized(db, 10, 0.75), lambda setup, db, x: setup.search(x, 1)
+)
 
 ax.set_xlabel(f"Database size [{embeddings.shape[1]}D elements]")
 ax.set_ylabel("Look-up time [s]")
-ax.set_title("Database size vs. look-up time")
+ax.set_title("Database size vs. FAISS look-up time")
 ax.legend()
-plt.savefig(str(args.output / "results.svg"))
+
+args.output.mkdir(exist_ok=True, parents=True)
+
+plt.savefig(str(args.output / "faiss.svg"))
 plt.close(fig)

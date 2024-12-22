@@ -66,7 +66,7 @@ def create_index(
             img = Image.open(file).convert("RGB")
             if processor is not None:
                 processed = processor(img)
-                processed['pixel_values'] = processed['pixel_values'].to(device)
+                processed["pixel_values"] = processed["pixel_values"].to(device)
                 embedding = model.get_image_features(**processed)
             elif transform is not None:
                 embedding = model(transform(img).to(device).unsqueeze(0))
@@ -97,22 +97,22 @@ def write_indices(index, names, title, output_path: Path):
 
 model_name = "" if args.model is None else args.model.lower()
 
-if model_name == "" or model_name == "vit":
+if model_name == "" or model_name == "dh_vit":
     model = load_model(HashNet(ViT()), "models/model_vit.pth")
     index, names = create_index(model, args.dataset, num_images=args.coco_size)
-    write_indices(index, names, "vit", args.output)
+    write_indices(index, names, "dh_vit", args.output)
 
-if model_name == "" or model_name == "deit":
+if model_name == "" or model_name == "dh_deit":
     model = load_model(HashNet(DeiT()), "models/model_deit.pth")
     index, names = create_index(model, args.dataset, num_images=args.coco_size)
     write_indices(index, names, "deit", args.output)
 
-if model_name == "" or model_name == "resnet":
+if model_name == "" or model_name == "dh_resnet":
     model = load_model(HashNet(ResNet()), "models/model_resnet.pth")
     index, names = create_index(model, args.dataset, num_images=args.coco_size)
     write_indices(index, names, "resnet", args.output)
 
-if model_name == "" or model_name == "alexnet":
+if model_name == "" or model_name == "dh_alexnet":
     model = load_model(HashNet(AlexNet()), "models/model_alexnet.pth")
     index, names = create_index(model, args.dataset, num_images=args.coco_size)
     write_indices(index, names, "alexnet", args.output)
@@ -137,12 +137,32 @@ if model_name == "" or model_name.startswith("clip"):
 
 if model_name == "" or model_name == "dinov2":
     model = timm.create_model("vit_small_patch14_dinov2.lvd142m", pretrained=True)
-    _ = model.eval()
+    model = model.eval()
     data_config = timm.data.resolve_model_data_config(model)
     transforms = timm.data.create_transform(**data_config, is_training=False)
     index, names = create_index(
         model, args.dataset, transform=transforms, num_images=args.coco_size
     )
     write_indices(index, names, model_name, args.output)
+
+if model_name == "" or model_name == "resnet":
+    model = timm.create_model("resnet18", pretrained=True)
+    model = model.eval()
+    data_config = timm.data.resolve_model_data_config(model)
+    transforms = timm.data.create_transform(**data_config, is_training=False)
+    index, names = create_index(
+        model, args.dataset, transform=transforms, num_images=args.coco_size
+    )
+    write_indices(index, names, "resnet", args.output)
+
+if model_name == "" or model_name == "vit":
+    model = timm.create_model("vit_base_patch16_224", pretrained=True)
+    model = model.eval()
+    data_config = timm.data.resolve_model_data_config(model)
+    transforms = timm.data.create_transform(**data_config, is_training=False)
+    index, names = create_index(
+        model, args.dataset, transform=transforms, num_images=args.coco_size
+    )
+    write_indices(index, names, "vit", args.output)
 
 print("Done.")

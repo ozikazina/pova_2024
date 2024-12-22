@@ -1,8 +1,7 @@
 import torch
 import gradio as gr
 import numpy as np
-from model import HashNet, ResNet, DeiT, ViT, AlexNet, transform_image
-from pathlib import Path
+from model import HashNet, ViT, transform_image
 import timm
 import faiss
 from datetime import datetime
@@ -40,7 +39,7 @@ model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
 model.to(device)
 processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 load_indices("clip")
-nprobe = 5
+nprobe = 20
 
 
 
@@ -61,35 +60,24 @@ def on_select(backend_type, image_input, cosine_distance):
         processor = timm.data.create_transform(**data_config, is_training=False)
         load_indices("dinov2")
     elif backend_type == "ResNet":
-        model = HashNet(ResNet())
-        model.net.load_state_dict(
-            torch.load(
-                "models/model_resnet.pth", weights_only=True, map_location=device
-            )
-        )
+        model = timm.create_model("resnet18", pretrained=True)
+        _ = model.eval()
+        data_config = timm.data.resolve_model_data_config(model)
+        processor = timm.data.create_transform(**data_config, is_training=False)
         load_indices("resnet")
-    elif backend_type == "AlexNet":
-        model = HashNet(AlexNet())
-        model.net.load_state_dict(
-            torch.load(
-                "models/model_alexnet.pth", weights_only=True, map_location=device
-            )
-        )
-        load_indices("alexnet")
     elif backend_type == "ViT":
+        model = timm.create_model("vit_base_patch16_224", pretrained=True)
+        _ = model.eval()
+        data_config = timm.data.resolve_model_data_config(model)
+        processor = timm.data.create_transform(**data_config, is_training=False)
+        load_indices("vit")
+    elif backend_type == "DeepHash ViT":
         model = HashNet(ViT())
         model.net.load_state_dict(
             torch.load("models/model_vit.pth", weights_only=True, map_location=device)
         )
-        load_indices("vit")
-    elif backend_type == "DeiT":
-        model = HashNet(DeiT())
-        model.net.load_state_dict(
-            torch.load("models/model_deit.pth", weights_only=True, map_location=device)
-        )
-        load_indices("deit")
+        load_indices("dh_vit")
 
-    # model.nprobe = nprobe
     model.to(device)
 
     if image_input:
@@ -102,7 +90,6 @@ def on_select(backend_type, image_input, cosine_distance):
 def on_set_probe(nprobe_val):
     global nprobe
     nprobe = nprobe_val
-    # model.nprobe = nprobe_val
 
 def on_cosine(backend_type, image_input, cosine_distance):
     if image_input:
@@ -147,14 +134,11 @@ with gr.Blocks() as demo:
         image_gallery = gr.Gallery(label="Similar images", elem_id="gallery")
     with gr.Row():
         backend_type = gr.Dropdown(
-            ["CLIP", "CLIP-L", "DINOv2", "AlexNet", "ResNet", "ViT", "DeiT"], label="Model"
+            ["CLIP", "CLIP-L", "DINOv2", "ResNet", "ViT", "DeepHash ViT"], label="Model"
         )
         distance_type = gr.Checkbox(
             label="Cosine distance",
         )
-        # nprobe_slider = gr.Slider(
-        #     minimum=1, maximum=20, value=5, step=1, label="Probes"
-        # )
         display = gr.Text(label="Info")
 
     image_input.upload(
@@ -162,6 +146,5 @@ with gr.Blocks() as demo:
     )
     distance_type.select(on_cosine, [backend_type, image_input, distance_type], image_gallery)
     backend_type.select(on_select, [backend_type, image_input, distance_type], [display, image_gallery])
-    # nprobe_slider.change(on_set_probe, nprobe_slider, None)
 
 demo.launch()
