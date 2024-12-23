@@ -105,35 +105,33 @@ if model_name == "" or model_name == "dh_vit":
 if model_name == "" or model_name == "dh_deit":
     model = load_model(HashNet(DeiT()), "models/model_deit.pth")
     index, names = create_index(model, args.dataset, num_images=args.coco_size)
-    write_indices(index, names, "deit", args.output)
+    write_indices(index, names, "dh_deit", args.output)
 
 if model_name == "" or model_name == "dh_resnet":
     model = load_model(HashNet(ResNet()), "models/model_resnet.pth")
     index, names = create_index(model, args.dataset, num_images=args.coco_size)
-    write_indices(index, names, "resnet", args.output)
+    write_indices(index, names, "dh_resnet", args.output)
 
 if model_name == "" or model_name == "dh_alexnet":
     model = load_model(HashNet(AlexNet()), "models/model_alexnet.pth")
     index, names = create_index(model, args.dataset, num_images=args.coco_size)
-    write_indices(index, names, "alexnet", args.output)
+    write_indices(index, names, "dh_alexnet", args.output)
 
 if model_name == "" or model_name.startswith("clip"):
     if model_name == "clip_l":
-        model_path = "openai/clip-vit-large-patch14"
+        model = timm.create_model("vit_large_patch14_clip_224.openai", pretrained=True)
         output_name = "clip_l"
     else:
-        model_path = "openai/clip-vit-base-patch32"
+        model = timm.create_model("vit_base_patch32_clip_224.openai_ft_in1k", pretrained=True)
         output_name = "clip"
 
-    model = CLIPModel.from_pretrained(model_path)
-    processor = CLIPProcessor.from_pretrained(model_path)
+    model = model.eval()
+    data_config = timm.data.resolve_model_data_config(model)
+    transforms = timm.data.create_transform(**data_config, is_training=False)
     index, names = create_index(
-        model,
-        args.dataset,
-        lambda img: processor(images=[img], return_tensors="pt"),
-        num_images=args.coco_size,
+        model, args.dataset, transform=transforms, num_images=args.coco_size
     )
-    write_indices(index, names, output_name, args.output)
+    write_indices(index, names, model_name, args.output)
 
 if model_name == "" or model_name == "dinov2":
     model = timm.create_model("vit_small_patch14_dinov2.lvd142m", pretrained=True)

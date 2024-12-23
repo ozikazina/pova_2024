@@ -1,7 +1,7 @@
 import torch
 import gradio as gr
 import numpy as np
-from model import HashNet, ViT, transform_image
+from model import HashNet, ViT, ResNet, transform_image
 import timm
 import faiss
 from datetime import datetime
@@ -35,48 +35,61 @@ def load_indices(name):
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+model = timm.create_model("vit_base_patch32_clip_224.openai_ft_in1k", pretrained=True)
+model = model.eval()
+data_config = timm.data.resolve_model_data_config(model)
+processor = timm.data.create_transform(**data_config, is_training=False)
 model.to(device)
-processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 load_indices("clip")
 nprobe = 20
-
 
 
 def on_select(backend_type, image_input, cosine_distance):
     global model, processor
     if backend_type == "CLIP":
-        model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        model = timm.create_model("vit_base_patch32_clip_224.openai_ft_in1k", pretrained=True)
+        model = model.eval()
+        data_config = timm.data.resolve_model_data_config(model)
+        processor = timm.data.create_transform(**data_config, is_training=False)
         load_indices("clip")
     elif backend_type == "CLIP-L":
-        model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14")
-        processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
+        model = timm.create_model("vit_large_patch14_clip_224.openai", pretrained=True)
+        model = model.eval()
+        data_config = timm.data.resolve_model_data_config(model)
+        processor = timm.data.create_transform(**data_config, is_training=False)
         load_indices("clip_l")
     elif backend_type == "DINOv2":
         model = timm.create_model("vit_small_patch14_dinov2.lvd142m", pretrained=True)
-        _ = model.eval()
+        model = model.eval()
         data_config = timm.data.resolve_model_data_config(model)
         processor = timm.data.create_transform(**data_config, is_training=False)
         load_indices("dinov2")
     elif backend_type == "ResNet":
         model = timm.create_model("resnet18", pretrained=True)
-        _ = model.eval()
+        model = model.eval()
         data_config = timm.data.resolve_model_data_config(model)
         processor = timm.data.create_transform(**data_config, is_training=False)
         load_indices("resnet")
     elif backend_type == "ViT":
         model = timm.create_model("vit_base_patch16_224", pretrained=True)
-        _ = model.eval()
+        model = model.eval()
         data_config = timm.data.resolve_model_data_config(model)
         processor = timm.data.create_transform(**data_config, is_training=False)
         load_indices("vit")
     elif backend_type == "DeepHash ViT":
         model = HashNet(ViT())
+        model = model.eval()
         model.net.load_state_dict(
             torch.load("models/model_vit.pth", weights_only=True, map_location=device)
         )
         load_indices("dh_vit")
+    elif backend_type == "DeepHash ResNet":
+        model = HashNet(ResNet())
+        model = model.eval()
+        model.net.load_state_dict(
+            torch.load("models/model_resnet.pth", weights_only=True, map_location=device)
+        )
+        load_indices("dh_resnet")
 
     model.to(device)
 
@@ -99,12 +112,7 @@ def on_cosine(backend_type, image_input, cosine_distance):
 
 def on_image_upload(image, backend_type, cosine_distance):
     start_time = datetime.now()
-    if backend_type.startswith("CLIP"):
-        with torch.no_grad():
-            inputs = processor(images=[image], return_tensors="pt")
-            inputs['pixel_values'] = inputs['pixel_values'].to(device)
-            embedding: torch.Tensor = model.get_image_features(**inputs)
-    elif backend_type == "DINOv2":
+    if backend_type == "DINOv2" or backend_type.startswith("CLIP"):
         with torch.no_grad():
             embedding = model(processor(image).to(device).unsqueeze(0))
     else:
@@ -134,7 +142,7 @@ with gr.Blocks() as demo:
         image_gallery = gr.Gallery(label="Similar images", elem_id="gallery")
     with gr.Row():
         backend_type = gr.Dropdown(
-            ["CLIP", "CLIP-L", "DINOv2", "ResNet", "ViT", "DeepHash ViT"], label="Model"
+            ["CLIP", "CLIP-L", "DINOv2", "ResNet", "ViT", "DeepHash ViT", "DeepHash ResNet"], label="Model"
         )
         distance_type = gr.Checkbox(
             label="Cosine distance",

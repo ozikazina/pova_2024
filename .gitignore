@@ -163,6 +163,6 @@ cython_debug/
 
 images/
 models/
-indices/clip.ids
 indices/*.npz
 benchmark_results/
+showcase/
