@@ -11,6 +11,7 @@ pip install -r requirements.txt
 ```bash
 mkdir -p models
 mkdir -p images
+mkdir -p indices
 ```
 
 ## Usage
@@ -24,12 +25,12 @@ python create_indices.py --use-coco -m CLIP
 
 The `-m` flag specifies which model to use. Available options are:
 - CLIP (default ViT-B/32)
-- CLIP-L (ViT-L/14)
+- CLIP_L (ViT-L/14)
 - DINOv2
 - ResNet
 - ViT
-- DeepHash ViT
-- DeepHash ResNet
+- dh_vit - DeepHash ViT
+- dh_resnet - DeepHash ResNet
 
 ### Running Benchmarks
 
