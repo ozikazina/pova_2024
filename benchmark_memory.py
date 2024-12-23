@@ -16,10 +16,6 @@ argp.add_argument("--search_size", default=20000, type=int, help="Number of look
 argp.add_argument(
     "--output", type=Path, default=Path("benchmark_results"), help="Output folder."
 )
-argp.add_argument("--patience", type=float, default=60, help="Time limit for lookups.")
-argp.add_argument(
-    "--setup_patience", type=float, default=60, help="Time limit for model setup."
-)
 argp.add_argument("index", type=Path, help=".npz embedding file path.")
 args = argp.parse_args()
 
@@ -47,13 +43,14 @@ fig, ax = plt.subplots()
 process = psutil.Process(os.getpid())
 
 
-def benchmark_method(name, color, init):
+def benchmark_method(name, color, limit: int, init):
     print(name)
     mems = []
     sizes = []
     i = 4096
+    limit = min(limit, len(embeddings)) if limit > 0 else len(embeddings)
 
-    while i < len(embeddings):
+    while i < limit:
         gc.collect()
 
         before = process.memory_info().rss
@@ -90,19 +87,13 @@ def setup_faiss_quantized(db):
 
 def setup_annoy(db, n_trees):
     index = annoy.AnnoyIndex(db.shape[1], "dot")
-    for i,vec in enumerate(db):
+    for i, vec in enumerate(db):
         index.add_item(i, vec)
 
     index.build(n_trees)
 
     return index
 
-benchmark_method("Annoy", "green", lambda db: setup_annoy(db, 10))
-benchmark_method("Annoy", "lime", lambda db: setup_annoy(db, 50))
-
-benchmark_method("FAISS", "blue", setup_faiss)
-
-benchmark_method("FAISS Clustered", "cornflowerblue", setup_faiss_quantized)
 
 def setup_hnsw(db):
     index = hnswlib.Index(space="ip", dim=db.shape[1])
@@ -110,8 +101,21 @@ def setup_hnsw(db):
     index.add_items(db)
     return index
 
-benchmark_method("HNSW", "red", setup_hnsw)
 
+search_vector = np.random.default_rng().random(
+    (search_size, embeddings.shape[1]), dtype=np.float32
+)
+
+# benchmark_method("NumPy", "green", 200000, lambda db: search_vector @ db.T)
+
+benchmark_method("FAISS", "blue", 0, setup_faiss)
+
+benchmark_method("FAISS Clustered", "cornflowerblue", 0, setup_faiss_quantized)
+
+benchmark_method("Annoy 10", "orangered", 0, lambda db: setup_annoy(db, 10))
+benchmark_method("Annoy 50", "orange", 0, lambda db: setup_annoy(db, 50))
+
+benchmark_method("HNSW", "red", 200000, setup_hnsw)
 
 ax.set_xlabel(f"Database size [{embeddings.shape[1]}D elements]")
 ax.set_ylabel("Memory [MB]")

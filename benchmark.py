@@ -43,12 +43,13 @@ search_size = args.search_size
 fig, ax = plt.subplots()
 
 
-def benchmark_method(name, color, init, search):
+def benchmark_method(name, color, limit, init, search):
     print(name)
     timings = []
     sizes = []
     i = 64
-    while i < len(embeddings):
+    limit = min(limit, len(embeddings)) if limit > 0 else len(embeddings)
+    while i < limit:
         random_vectors = np.random.default_rng().random(
             (search_size, embeddings.shape[1]), dtype=np.float32
         )
@@ -114,18 +115,18 @@ def setup_hnsw(db):
     return index
 
 benchmark_method(
-    "NumPy", "green", lambda db: None, lambda setup, db, x: np.argmax(db @ x.T, axis=0)
+    "NumPy", "green", 200000, lambda db: None, lambda setup, db, x: np.argmax(db @ x.T, axis=0)
 )
 
-benchmark_method("FAISS", "cornflowerblue", setup_faiss, lambda setup, db, x: setup.search(x, 1))
+benchmark_method("FAISS", "cornflowerblue", 0, setup_faiss, lambda setup, db, x: setup.search(x, 1))
 
 benchmark_method(
-    "FAISS Clustered", "royalblue", setup_faiss_quantized, lambda setup, db, x: setup.search(x, 1)
+    "FAISS Clustered", "royalblue", 0, setup_faiss_quantized, lambda setup, db, x: setup.search(x, 1)
 )
 
-benchmark_method("Annoy", "red", setup_annoy, run_annoy)
+benchmark_method("Annoy", "red", 0, setup_annoy, run_annoy)
 
-benchmark_method("HNSW", "orangered", setup_hnsw, lambda setup, db, x: setup.knn_query(x, k=1))
+benchmark_method("HNSW", "orangered", 0, setup_hnsw, lambda setup, db, x: setup.knn_query(x, k=1))
 
 ax.set_xlabel(f"Database size [{embeddings.shape[1]}D elements]")
 ax.set_ylabel("Look-up time [s]")
