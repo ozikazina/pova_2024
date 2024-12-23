@@ -7,3 +7,7 @@ faiss
 matplotlib
 annoy
 hnswlib
+numpy
+gradio
+tqdm
+psutil
